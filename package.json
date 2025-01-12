@@ -1,0 +1,22 @@
+{
+  "name": "microbe",
+  "version": "1.0.0",
+  "description": "A WebAssembly-based PCM audio generator using Rust, wasm-bindgen, Rayon, and SIMD.",
+  "scripts": {
+    "build": "wasm-pack build --target web",
+    "postbuild": "wasm2wat --enable-threads pkg/microbe_bg.wasm -o pkg/microbe_bg.wast",
+    "test": "cargo test",
+    "dev": "vite",
+    "clean": "cargo clean",
+    "lint": "cargo clippy",
+    "format": "cargo fmt --all"
+  },
+  "devDependencies": {
+    "vite": "^6.0.7",
+    "@types/web": "^0.0.192",
+    "@types/audioworklet": "^0.0.65"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {}
+}
