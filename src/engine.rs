@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use crate::ringbuf::RingBuffer;
 use crate::sine::sine;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -32,6 +33,67 @@ pub struct AudioEngine {
 
 #[wasm_bindgen]
 impl AudioEngine {
+
+    fn copy_to_clones(
+      &self,
+      ring_buffer: &RingBuffer,
+      clones: &mut [Vec<f32>],
+    ) {
+        // Copy original data from RingBuffer
+        let mut original_data = vec![0.0f32; self.buffer_size * 2];
+        ring_buffer.copy_data(&mut original_data);
+
+        // Copy the data into each clone
+        for clone in clones.iter_mut() {
+            clone.copy_from_slice(&original_data);
+        }
+    }
+
+    fn process_and_aggregate(
+      &self,
+      clones: &mut [Vec<f32>],
+      freq: f32,
+      amp: f32,
+      sample_rate: f32,
+      current_time: f64,
+      current_frame: u64,
+    ) -> Vec<f32> {
+        // Process each clone in parallel
+        clones.par_iter_mut().for_each(|clone| {
+            sine(
+                clone,                // Pass mutable buffer
+                freq,
+                amp,
+                sample_rate,
+                clone.len() / 2,      // Stereo frames
+                current_time,
+                current_frame,
+            );
+        });
+
+        // Aggregate results into a final buffer
+        let mut final_buffer = vec![0.0f32; self.buffer_size * 2];
+
+        for clone in clones.iter() { // Reborrow `clones` to avoid moving
+            for (i, sample) in clone.iter().enumerate() {
+                final_buffer[i] += *sample;
+            }
+        }
+
+        // Normalize by dividing by the number of clones
+        let num_clones = clones.len() as f32; // Cache the length to avoid borrowing
+        final_buffer.iter_mut().for_each(|sample| *sample /= num_clones);
+
+        final_buffer
+    }
+
+    fn allocate_clones(&self, n: usize) -> Vec<Vec<f32>> {
+      // Allocate `n` buffers with the size of the original buffer
+      (0..n)
+          .map(|_| vec![0.0f32; self.buffer_size * 2]) // Stereo: Left + Right
+          .collect()
+    }
+
     #[wasm_bindgen(constructor)]
     pub fn new(
         shared_buffer: JsValue,
@@ -93,6 +155,9 @@ impl AudioEngine {
         let performance = web_sys::window()
             .and_then(|w| w.performance())
             .expect("Performance API not available");
+
+        let n = 2; // Number of parallel computations
+        let mut clones = self.allocate_clones(n);
     
         // Precompute buffer sizes and avoid recomputation
         let double_buffer_size = self.buffer_size * 2;
@@ -116,17 +181,22 @@ impl AudioEngine {
                 let current_frame = self.current_frame.load(Ordering::Acquire);
                 let current_time = f64::from_bits(self.current_time.load(Ordering::Acquire));
     
-                // Use a pre-allocated sine wave generator
-                sine(
-                    &self.buffer,
+                  // Copy original data to clones
+                self.copy_to_clones(&self.buffer, &mut clones);
+
+                // Process and aggregate
+                let final_buffer = self.process_and_aggregate(
+                    &mut clones,
                     freq,
                     amp,
                     self.sample_rate,
-                    self.buffer_size,
                     current_time,
                     current_frame,
                 );
-    
+
+                // Write aggregated buffer back to RingBuffer
+                self.buffer.write(&final_buffer);
+ 
                 // Update frame count (in mono frames)
                 self.current_frame
                     .fetch_add(self.buffer_size as u64, Ordering::Release);

@@ -83,4 +83,24 @@ impl RingBuffer {
     pub fn capacity(&self) -> u32 {
         self.capacity - 1
     }
+
+    pub fn copy_data(&self, target: &mut [f32]) {
+        let rd = Atomics::load(&self.read_ptr, 0).unwrap_or(0) as u32;
+        let wr = Atomics::load(&self.write_ptr, 0).unwrap_or(0) as u32;
+
+        // Calculate the amount of data available to read
+        let available = ((wr + self.capacity - rd) % self.capacity) as usize;
+        let to_copy = std::cmp::min(target.len(), available);
+
+        // Copy data in two parts to handle wraparound
+        let first_part = std::cmp::min(to_copy, (self.capacity - rd) as usize);
+        for i in 0..first_part {
+            target[i] = self.storage.get_index((rd + i as u32) % self.capacity);
+        }
+
+        let second_part = to_copy - first_part;
+        for i in 0..second_part {
+            target[first_part + i] = self.storage.get_index(i as u32);
+        }
+    }
 }
