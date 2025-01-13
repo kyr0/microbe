@@ -1,79 +1,39 @@
-import { initSync, initThreadPool, sine } from '../pkg/microbe';
+import { RingBuffer, AudioReader, deinterleave } from "./ringbuf/index.js";
 
-export default class ToneProcessor extends AudioWorkletProcessor {
+export default class SignalForwarder extends AudioWorkletProcessor {
+  audioReader: AudioReader;
+  readBuffer: Float32Array | null;
   bufferSize: number;
-  sampleRate: number;
-  samplesLeft: Float32Array;
-  samplesRight: Float32Array;
-  frequency: number;
-  amplitude: number;
-  module: WebAssembly.Module;
 
   constructor(options: AudioWorkletNodeOptions) {
     super();
-    this.bufferSize = 128; // Small buffer for real-time audio processing
-    this.sampleRate = sampleRate;
-    this.samplesLeft = new Float32Array(this.bufferSize);
-    this.samplesRight = new Float32Array(this.bufferSize);
-    this.frequency = 440.0; // Default frequency (A4)
-    this.amplitude = 0.5; // Default amplitude
-    this.module = options.processorOptions.module;
-  }
-
-  static get parameterDescriptors() {
-    return [
-      {
-        name: "frequency",
-        defaultValue: 440.0,
-        minValue: 20.0,
-        maxValue: 20000.0,
-        automationRate: "a-rate",
-      },
-      {
-        name: "amplitude",
-        defaultValue: 0.5,
-        minValue: 0.0,
-        maxValue: 1.0,
-        automationRate: "a-rate",
-      },
-    ];
+    this.audioReader = new AudioReader(new RingBuffer(options.processorOptions.sharedAudioBuffer, Float32Array));
+    this.readBuffer = null;
+    this.bufferSize = 0;
   }
 
   process(
-    _inputs: Float32Array[][],
-    outputs: Float32Array[][],
-    parameters: Record<string, Float32Array>,
- 
+    _inputs: Array<Array<Float32Array>>,
+    outputs: Array<Array<Float32Array>>,
+    _parameters: Record<string, Float32Array>
   ): boolean {
-    const outputLeft = outputs[0][0];
-    const outputRight = outputs[0][1];
+    const frameCount = outputs[0][0].length;
+    const channelCount = outputs[0].length;
+    const bufferSize = frameCount * channelCount;
 
-    // Update parameters if they are provided
-    this.frequency = parameters.frequency[0];
-    this.amplitude = parameters.amplitude[0];
+    // allocate the read buffer if it doesn't exist or if the size has changed
+    if (!this.readBuffer || this.bufferSize !== bufferSize) {
+      this.bufferSize = bufferSize;
+      this.readBuffer = new Float32Array(bufferSize);
+    }
 
-
-    initSync({ module: this.module });
-    // use this.module!
-
-    // Call the WebAssembly `sine_wave` function
-    /*
-    sine(
-      this.samplesLeft,
-      this.samplesRight,
-      this.frequency,
-      this.amplitude,
-      2, // Stereo
-      this.sampleRate
-    );
-    */
-
-    // Copy generated samples to output buffers
-    outputLeft.set(this.samplesLeft);
-    outputRight.set(this.samplesRight);
-
-    return true; // Keep the processor alive
+    if (this.audioReader.availableRead()) {
+      // read from RingBuffer, adjust read pointer
+      this.audioReader.dequeue(this.readBuffer);
+      // each even value goes to left channel, each odd value to right channel
+      deinterleave(this.readBuffer, outputs[0]);
+    }
+    return true; // keep the processor alive
   }
 }
-
-registerProcessor("tone-processor", ToneProcessor);
+registerProcessor("signal-forwarder", SignalForwarder);
