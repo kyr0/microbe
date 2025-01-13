@@ -38,7 +38,7 @@ async function main() {
       );
       const timeAvailableMs = (bufferSize / audioContext.sampleRate) * 1000;
       const parallelism = parallelismEl ? Number.parseInt(parallelismEl.value, 10) : 1;
-      const waveform = waveformEl ? Number.parseInt(waveformEl.value, 10) as Waveform : Waveform.Sawtooth;
+      const waveform = waveformEl ? Number.parseInt(waveformEl.value, 10) as Waveform : Waveform.Triangle;
 
       if (audioEngine === null) {
         audioEngine = new AudioEngine(sharedAudioBuffer, bufferSize, audioContext.sampleRate, parallelism, waveform);
