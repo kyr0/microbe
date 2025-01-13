@@ -11,6 +11,7 @@ async function main() {
   const parallelismEl = document.getElementById('parallelism') as HTMLInputElement;
   const waveformEl = document.getElementById('waveform') as HTMLSelectElement;
   const playButton = document.getElementById('play') as HTMLButtonElement;
+  const statsEl = document.getElementById('stats') as HTMLPreElement;
 
   // init wasm-bindgen
   await init();
@@ -24,10 +25,10 @@ async function main() {
   playButton?.addEventListener('click', async() => {
       
     playButton.innerHTML = '⏹ Stop';
+    statsEl.innerHTML = '-';
 
     // Initialize AudioContext and add AudioWorkletProcessor
     const audioContext = new AudioContext();
-    const statsEl = document.getElementById('stats');
 
     try {
       // load the AudioWorklet processor
@@ -37,7 +38,7 @@ async function main() {
       const bufferSize = bufferSizeEl ? Number.parseInt(bufferSizeEl.value, 10) : 512;
       const channels = 2; // Stereo
       const sharedAudioBuffer = getStorageForCapacity(
-        bufferSize * channels /** channels */ * 2 /** leave room for one ringbuffer rewind*/, Float32Array
+        bufferSize * channels /** channels */ * 12 /** leave room for one ringbuffer rewind*/, Float32Array
       );
       const timeAvailableMs = (bufferSize / audioContext.sampleRate) * 1000;
       const parallelism = parallelismEl ? Number.parseInt(parallelismEl.value, 10) : 1;

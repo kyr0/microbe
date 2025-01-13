@@ -13,7 +13,7 @@ pub struct RingBuffer {
 impl RingBuffer {
   pub fn new(shared_buffer: JsValue) -> RingBuffer {
     if !shared_buffer.is_instance_of::<js_sys::SharedArrayBuffer>() {
-        panic!("Expected a SharedArrayBuffer");
+      panic!("Expected a SharedArrayBuffer");
     }
 
     let write_ptr = js_sys::Uint32Array::new_with_byte_offset(&shared_buffer, 0);

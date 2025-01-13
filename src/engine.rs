@@ -29,6 +29,7 @@ pub enum Waveform {
     Triangle = 2,
     Sawtooth = 3,
 }
+const DEFAULT_CROSSFADE_TIME: u32 = 10;
 
 #[wasm_bindgen]
 pub struct AudioEngine {
@@ -40,6 +41,7 @@ pub struct AudioEngine {
   sample_rate: f32,
   current_frame: Arc<AtomicU64>,
   is_running: Arc<AtomicBool>,
+  needs_crossfade: Arc<AtomicU32>,
   stats_callback: Option<js_sys::Function>,
   parallelism: usize,
 }
@@ -78,13 +80,15 @@ impl AudioEngine {
       buffer_size,
       current_frame: Arc::new(AtomicU64::new(0)),
       is_running: Arc::new(AtomicBool::new(false)),
+      needs_crossfade: Arc::new(AtomicU32::new(DEFAULT_CROSSFADE_TIME)),
       stats_callback: None,
-      parallelism,
+      parallelism
     }
   }
 
   pub fn set_waveform(&self, waveform: Waveform) {
     self.waveform.store(waveform as u8, Ordering::SeqCst);
+    self.needs_crossfade.store(DEFAULT_CROSSFADE_TIME, Ordering::SeqCst);
   }
 
   fn copy_to_clones(
@@ -110,44 +114,74 @@ impl AudioEngine {
   fn process_and_aggregate(
     &self,
     clones: &mut [Vec<f32>],
-    freq: f32,
-    amp: f32,
+    base_freq: f32,
+    current_amp: f32,
     sample_rate: f32,
     current_frame: u64,
+    prev_final_buffer: Vec<f32>,
   ) -> Vec<f32> {
-    
-    // Retrieve the current waveform value as a u8
-    let waveform_value = self.waveform.load(Ordering::Acquire);
+    // retrieve the waveform processing function
+    let waveform_value = self.waveform.load(Ordering::SeqCst);
+    let process_waveform = match waveform_value {
+      0 => sine::sine,
+      1 => square::square,
+      2 => triangle::triangle,
+      3 => saw::saw,
+      _ => panic!("Invalid waveform value: {}", waveform_value),
+    };
 
-    // process each clone in parallel
-    clones.par_iter_mut().for_each(|clone| {
-      match waveform_value {
-        0 => sine::sine(clone, freq, amp, sample_rate, clone.len() / 2, current_frame),
-        1 => square::square(clone, freq, amp, sample_rate, clone.len() / 2, current_frame),
-        2 => triangle::triangle(clone, freq, amp, sample_rate, clone.len() / 2, current_frame),
-        3 => saw::saw(clone, freq, amp, sample_rate, clone.len() / 2, current_frame),
-        _ => panic!("Invalid waveform value: {}", waveform_value),
-      }
-    });
+    // pre-compute adjusted amplitude
+    let adjusted_amp = current_amp * (440.0 / base_freq).sqrt();
+    let num_clones = clones.len() as f32;
 
-    // aggregate results in parallel
-    let mut final_buffer = vec![0.0f32; self.buffer_size * 2];
-
-    final_buffer
+    // process and aggregate results in parallel without mutable state
+    let result = clones
       .par_iter_mut()
       .enumerate()
-      .for_each(|(i, sample)| {
-        *sample = clones
-          .iter()
-          .map(|clone| clone[i])
-          .sum::<f32>();
-      });
+      .map(|(i, clone)| {
+        let freq_variation = base_freq + i as f32;
 
-    // normalize by dividing by the number of clones
-    let num_clones = clones.len() as f32; // cache the length
-    final_buffer.par_iter_mut().for_each(|sample| *sample /= num_clones);
+        // process the current waveform for the clone
+        process_waveform(
+          clone,
+          freq_variation,
+          adjusted_amp,
+          sample_rate,
+          clone.len() / 2,
+          current_frame,
+        );
 
-    final_buffer
+        clone.clone() // return the processed clone
+      })
+      .reduce_with(|mut acc, clone_data| {
+        for (a, c) in acc.iter_mut().zip(clone_data.iter()) {
+          *a += c;
+        }
+        acc
+      })
+      .unwrap_or_else(|| vec![0.0; self.buffer_size * 2]);
+
+    // normalize the accumulated values
+    let mut new_final = result.iter().map(|&sample| sample / num_clones).collect::<Vec<f32>>();
+
+    // load the number of crossfade blocks remaining
+    let crossfade_blocks = self.needs_crossfade.load(Ordering::SeqCst);
+
+    if crossfade_blocks > 0 {
+        let fraction_done = 1.0 - (crossfade_blocks as f32 / DEFAULT_CROSSFADE_TIME as f32);
+        let fade_in = fraction_done.powi(3); // smoother fade-in with quintic easing
+        let fade_out = 1.0 - fade_in; // calculate fade-out as the complement of fade-in
+
+        // apply volume fade and lowpass filter effect in a single pass
+        new_final.iter_mut().zip(prev_final_buffer.iter()).for_each(|(current_sample, prev_sample)| {
+            *current_sample = ((*prev_sample * fade_out + *current_sample * fade_in) * fade_in).clamp(0.0, 1.0);
+        });
+
+        // decrement the crossfade block count
+        self.needs_crossfade.fetch_sub(1, Ordering::SeqCst);
+    }
+
+    new_final
   }
 
   fn allocate_clones(&self, n: usize) -> Vec<Vec<f32>> {
@@ -168,10 +202,12 @@ impl AudioEngine {
 
   pub fn set_frequency(&self, frequency: f32) {
     self.frequency.store(frequency.to_bits(), Ordering::Release);
+    self.needs_crossfade.store(DEFAULT_CROSSFADE_TIME, Ordering::SeqCst);
   }
 
   pub fn set_amplitude(&self, amplitude: f32) {
     self.amplitude.store(amplitude.to_bits(), Ordering::Release);
+    self.needs_crossfade.store(DEFAULT_CROSSFADE_TIME, Ordering::SeqCst);
   }
 
   #[wasm_bindgen]
@@ -193,14 +229,15 @@ impl AudioEngine {
     // pre-allocate intermediate variables for statistics
     let mut total_computation_time_ms = 0.0;
     let mut render_count = 0;
+    let mut final_buffer = vec![0.0; self.buffer_size * 2];
 
     while self.is_running.load(Ordering::Acquire) {
       let start_time_ms = performance.now();
       let available = self.buffer.available_to_write() as usize;
 
-      // check if enough space for stereo frames
+      //let to_write = std::cmp::min(available, double_buffer_size);
       if available >= double_buffer_size {
-        // load parameters from atomic variables
+         // load parameters from atomic variables
         let freq = f32::from_bits(self.frequency.load(Ordering::Acquire));
         let amp = f32::from_bits(self.amplitude.load(Ordering::Acquire));
         let current_frame = self.current_frame.load(Ordering::Acquire);
@@ -209,12 +246,13 @@ impl AudioEngine {
         self.copy_to_clones(&self.buffer, &mut clones, &mut original_data);
 
         // process clones and aggregate results
-        let final_buffer = self.process_and_aggregate(
+        final_buffer = self.process_and_aggregate(
           &mut clones,
           freq,
           amp,
           self.sample_rate,
           current_frame,
+          final_buffer, // pass an empty vector as the initial final_buffer
         );
 
         // write results to the RingBuffer
@@ -229,7 +267,24 @@ impl AudioEngine {
         total_computation_time_ms += end_time_ms - start_time_ms;
 
         render_count += 1;
+      } else {
+        if available < double_buffer_size {
+          let chunk_time_ms = (self.buffer_size as f64 / self.sample_rate as f64) * 1000.0;
+          gloo_timers::future::sleep(std::time::Duration::from_millis(chunk_time_ms as u64 / 4)).await;
+      } else {
+          // no space, sleep
+          // instead of sleeping for a fixed duration, dynamically adjust sleep time
+          let sleep_duration = std::time::Duration::from_millis(0);
+          gloo_timers::future::sleep(sleep_duration).await;
+        }
       }
+
+      // check if enough space for stereo frames
+      //if available >= double_buffer_size {
+        
+      //} else {
+      
+      //}
 
       // calculate and log statistics every 100 renders
       if render_count == 100 {
@@ -250,8 +305,6 @@ impl AudioEngine {
         render_count = 0;
       }
 
-      // efficient yielding using a timer
-      gloo_timers::future::sleep(std::time::Duration::from_millis(0)).await;
     }
 
     Ok(())

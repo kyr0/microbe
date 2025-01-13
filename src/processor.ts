@@ -28,9 +28,14 @@ export default class SignalForwarder extends AudioWorkletProcessor {
     }
 
     if (this.audioReader.availableRead()) {
-      // read from RingBuffer, adjust read pointer
-      this.audioReader.dequeue(this.readBuffer);
-      // each even value goes to left channel, each odd value to right channel
+      const needed = frameCount * channelCount;
+      const read = this.audioReader.dequeue(this.readBuffer);
+      // handle stale data
+      if (read < needed) {
+        // fill the remainder with zeros
+        this.readBuffer.fill(0, read);
+        console.warn(`Read buffer underflow: ${read} < ${needed}`);
+      }
       deinterleave(this.readBuffer, outputs[0]);
     }
     return true; // keep the processor alive
