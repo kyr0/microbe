@@ -26,7 +26,7 @@ async function main() {
       await audioContext.audioWorklet.addModule(processor);
       
       console.log('AudioWorklet module loaded');
-      const bufferSize = audioContext.sampleRate / 20; // 50ms buffer
+      const bufferSize = 512;
       const channels = 2; // Stereo
       const sharedAudioBuffer = getStorageForCapacity(
         bufferSize * channels /** channels */ * 2 /** leave room for one ringbuffer rewind*/, Float32Array

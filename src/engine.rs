@@ -77,7 +77,7 @@ impl AudioEngine {
     pub fn set_amplitude(&self, amplitude: f32) {
         self.amplitude.store(amplitude.to_bits(), Ordering::Release);
     }
-    
+
     #[wasm_bindgen]
     pub async fn start(&self) -> Result<(), JsValue> {
         self.is_running.store(true, Ordering::Release);
