@@ -1,9 +1,9 @@
 use crate::ringbuf::RingBuffer;
 use crate::sine::sine;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::Arc;
 use wasm_bindgen::prelude::*;
-use web_sys::{console};
+use web_sys::console;
 
 pub fn note_fo_freq(note: u8) -> f32 {
     // A4 is the 49th key on a standard 88-key piano, with a frequency of 440 Hz
@@ -32,16 +32,25 @@ pub struct AudioEngine {
 #[wasm_bindgen]
 impl AudioEngine {
     #[wasm_bindgen(constructor)]
-    pub fn new(shared_buffer: JsValue, channel_count: usize, buffer_size: usize, sample_rate: f32) -> AudioEngine {
+    pub fn new(
+        shared_buffer: JsValue,
+        channel_count: usize,
+        buffer_size: usize,
+        sample_rate: f32,
+    ) -> AudioEngine {
         if !shared_buffer.is_instance_of::<js_sys::SharedArrayBuffer>() {
             panic!("shared_buffer is not a SharedArrayBuffer");
         }
-        
+
         let buffer = Arc::new(RingBuffer::new(shared_buffer));
-        console::log_1(&format!(
-            "AudioEngine initialized - buffer capacity: {}, buffer_size: {}", 
-            buffer.capacity(), buffer_size
-        ).into());
+        console::log_1(
+            &format!(
+                "AudioEngine initialized - buffer capacity: {}, buffer_size: {}",
+                buffer.capacity(),
+                buffer_size
+            )
+            .into(),
+        );
 
         AudioEngine {
             buffer,
@@ -73,29 +82,27 @@ impl AudioEngine {
     pub async fn start(&self) -> Result<(), JsValue> {
         self.is_running.store(true, Ordering::Release);
 
-        
         let performance = web_sys::window()
             .and_then(|w| w.performance())
             .expect("Performance API not available");
-      
 
         let double_buffer_size = self.buffer_size * 2;
 
         let mut total_delay_frames = 0u64;
         let mut total_computation_time_ms = 0.0;
         let mut render_count = 0;
-        
+
         while self.is_running.load(Ordering::Acquire) {
             let start_time_ms = performance.now();
             let available = self.buffer.available_to_write() as usize;
-            
+
             // Need space for stereo frames
             if available >= double_buffer_size {
                 let freq = f32::from_bits(self.frequency.load(Ordering::Acquire));
                 let amp = f32::from_bits(self.amplitude.load(Ordering::Acquire));
                 let current_frame = self.current_frame.load(Ordering::Acquire);
                 let current_time = f64::from_bits(self.current_time.load(Ordering::Acquire));
-            
+
                 // test signal path using sine wave generator
                 sine(
                     &self.buffer,
@@ -104,21 +111,24 @@ impl AudioEngine {
                     self.sample_rate,
                     self.buffer_size,
                     current_time,
-                    current_frame
+                    current_frame,
                 );
 
                 // Update frame count (in mono frames)
-                self.current_frame.fetch_add(self.buffer_size as u64, Ordering::Release);
+                self.current_frame
+                    .fetch_add(self.buffer_size as u64, Ordering::Release);
                 total_delay_frames += self.buffer_size as u64;
-                
+
                 // End time for the signal path
-                let end_time_ms = performance.now(); 
+                let end_time_ms = performance.now();
                 total_computation_time_ms += end_time_ms - start_time_ms;
-                
+
                 render_count += 1;
 
                 // Update current time
-                let new_time = ((current_frame + self.buffer_size as u64) as f64 / self.sample_rate as f64).to_bits();
+                let new_time = ((current_frame + self.buffer_size as u64) as f64
+                    / self.sample_rate as f64)
+                    .to_bits();
                 self.current_time.store(new_time, Ordering::Release);
             }
 
@@ -135,7 +145,6 @@ impl AudioEngine {
                 // Congestion (render time congestion)
                 let render_time_congestion_ms = avg_computation_time_ms - avg_delay_ms as f64;
 
-                
                 console::log_1(
                     &format!(
                         "Average delay: {:.3} ms, Average computation time: {:.3} ms, Render time congestion: {:.3} ms",
@@ -143,9 +152,6 @@ impl AudioEngine {
                     )
                     .into(),
                 );
-                
-                
-                // Reset counters
                 total_delay_frames = 0;
                 total_computation_time_ms = 0.0;
                 render_count = 0;
@@ -153,8 +159,8 @@ impl AudioEngine {
 
             // Yield to the event loop
             //let promise = js_sys::Promise::resolve(&JsValue::UNDEFINED);
-            //wasm_bindgen_futures::JsFuture::from(promise).await.unwrap()
-            ;
+            //wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
+            
             // Efficient yielding
             gloo_timers::future::sleep(std::time::Duration::from_millis(0)).await;
         }

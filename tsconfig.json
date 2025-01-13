@@ -1,16 +1,16 @@
 {
   "compilerOptions": {
-    "target": "ES2020", // Modern JavaScript features for WebAssembly
-    "module": "ESNext", // Support for ES Modules
+    "target": "ES2020", 
+    "module": "ESNext",
     "moduleResolution": "Node",
-    "strict": true, // Enable strict type checking
+    "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["@types/web", "vite/client", "@types/audioworklet"], // Include DOM types for Web Audio APIs
-    "lib": ["ES2023"] // Ensure DOM APIs are available
+    "types": ["@types/web", "vite/client", "@types/audioworklet"],
+    "lib": ["ES2023"] 
   },
   "include": [
     "src/**/*.ts"
   ],
-  "exclude": ["node_modules", "dist"] // Exclude build and dependency directories
+  "exclude": ["node_modules", "dist"]
 }

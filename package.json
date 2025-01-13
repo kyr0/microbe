@@ -5,11 +5,9 @@
   "scripts": {
     "build": "wasm-pack build --target web",
     "postbuild": "wasm2wat --enable-threads pkg/microbe_bg.wasm -o pkg/microbe_bg.wast",
-    "test": "cargo test",
     "dev": "vite",
     "clean": "cargo clean",
-    "lint": "cargo clippy",
-    "format": "cargo fmt --all"
+    "fmt": "cargo fmt --all -- --check"
   },
   "devDependencies": {
     "vite": "^6.0.7",
