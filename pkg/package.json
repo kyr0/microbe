@@ -1,0 +1,15 @@
+{
+  "name": "microbe",
+  "type": "module",
+  "version": "0.0.1",
+  "files": [
+    "microbe_bg.wasm",
+    "microbe.js",
+    "microbe.d.ts"
+  ],
+  "main": "microbe.js",
+  "types": "microbe.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
