@@ -7,14 +7,14 @@ console.log('SharedArrayBuffer support enabled?', self.crossOriginIsolated);
 async function main() {
   let audioEngine: AudioEngine|null = null;
 
-  // Regular wasm-bindgen initialization.
+  // init wasm-bindgen
   await init();
 
-  // Thread pool initialization with the given number of threads
-  // (pass `navigator.hardwareConcurrency` if you want to use all cores).
-  await initThreadPool(navigator.hardwareConcurrency);
-
   console.log("hardwareConcurrency", navigator.hardwareConcurrency) // e.g. 8 hyperthreads
+
+  // thread pool initialization with the given number of threads
+  // e.g. 8 hyperthreads (cores) on a modern CPU
+  await initThreadPool(navigator.hardwareConcurrency);
 
   document.querySelector('button')?.addEventListener('click', async() => {
       
@@ -27,18 +27,18 @@ async function main() {
       
       console.log('AudioWorklet module loaded');
       const bufferSize = audioContext.sampleRate / 20; // 50ms buffer
+      const channels = 2; // Stereo
       const sharedAudioBuffer = getStorageForCapacity(
-        bufferSize * 2 /** channels */ * 2 /** leave room for one ringbuffer rewind*/, Float32Array
+        bufferSize * channels /** channels */ * 2 /** leave room for one ringbuffer rewind*/, Float32Array
       );
 
       if (audioEngine === null) {
-        audioEngine = new AudioEngine(sharedAudioBuffer, bufferSize, audioContext.sampleRate);
-        audioEngine.set_frequency(440); // Default frequency: A4
-        audioEngine.set_amplitude(0.15); // Default amplitude: 50%
-        audioEngine.start(); // Start the oscillator
+        audioEngine = new AudioEngine(sharedAudioBuffer, channels, bufferSize, audioContext.sampleRate);
+        audioEngine.set_note(36); // C1
+        audioEngine.set_amplitude(0.15); // 15%
+        audioEngine.start();
         console.log('AudioEngine started');
       } else {
-        // Stop and free the engine
         audioEngine.stop();
         audioEngine.free();
         audioEngine = null;
@@ -48,11 +48,13 @@ async function main() {
       // forwards a SharedArrayBuffer's audio signal via RingBuffer to the AudioContext.destination
       // this allows for a lock-free, wait-free, and zero-copy audio signal forwarding
       const signalForwarderNode = new AudioWorkletNode(audioContext, 'signal-forwarder', {
-        outputChannelCount: [2], // Stereo output
+        outputChannelCount: [channels],
         processorOptions: {
-          sharedAudioBuffer, // Shared memory buffer (controlled via RingBuffer)
+          sharedAudioBuffer,
         },
       });
+
+      // forward the signal to the AudioContext.destination (speakers)
       signalForwarderNode.connect(audioContext.destination);
     
     } catch (error) {
@@ -61,17 +63,15 @@ async function main() {
     }
   });
 
-  // Slider for primary frequency control
   const primarySlider: HTMLInputElement = document.getElementById('freq') as HTMLInputElement;
   primarySlider.addEventListener('input', (event) => {
     const value = Number.parseFloat((event.target as HTMLInputElement).value);
     if (audioEngine) {
-      audioEngine.set_frequency(value);
-      console.log(`Frequency set to ${value} Hz`);
+      audioEngine.set_note(value);
+      console.log(`MIDI note set to: ${value}`);
     }
   });
 
-  // Slider for amplitude control
   const amplitudeSlider: HTMLInputElement = document.getElementById('amp') as HTMLInputElement;
   amplitudeSlider.addEventListener('input', (event) => {
     const value = Number.parseFloat((event.target as HTMLInputElement).value);

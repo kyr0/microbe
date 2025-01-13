@@ -8,15 +8,28 @@
 </head>
 
 <body>
+
+  <h1>Multi-threading, WebAssembly-driven and SIMD-optimized Audio Engine Experiment</h1>
+
+  <p>
+    This simple experiment demonstrates how to use WebAssembly to create a multithreading, SIMD-optimized audio engine
+    using Rust. The architecture is quite unique, as the Web Audio API is only used for one
+    <code>AudioWorkletProcessor</code>
+    that receives the audio data from the WebAssembly-based Audio Engine via an atomic, lock-free, wait-free, and
+    zero-copy <code>RingBuffer</code> that wraps a <code>SharedArrayBuffer</code> that is shared between the
+    WebAssembly, the
+    AudioWorklet thread, and the main thread.
+  </p>
+
+  <div>
+    MIDI Note: <input type="range" min="20" max="84" step="1" value="36" style="width: 400px" id="freq" />
+  </div>
+
+  <div>
+    Volume: <input type="range" min="0" max="1" value="0.15" step="0.05" style="width: 400px" id="amp" />
+  </div>
+
   <button id="play">Play</button>
-
-  <div>
-    Frequency: <input type="range" min="30" max="22000" value="440" style="width: 400px" id="freq" />
-  </div>
-
-  <div>
-    Amplitude: <input type="range" min="0" max="1" value="0.15" step="0.05" style="width: 400px" id="amp" />
-  </div>
 
   <script type="module" src="/src/index.ts"></script>
 </body>
