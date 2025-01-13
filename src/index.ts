@@ -10,6 +10,7 @@ async function main() {
   const bufferSizeEl = document.getElementById('bufferSize') as HTMLSelectElement;
   const parallelismEl = document.getElementById('parallelism') as HTMLInputElement;
   const waveformEl = document.getElementById('waveform') as HTMLSelectElement;
+  const playButton = document.getElementById('play') as HTMLButtonElement;
 
   // init wasm-bindgen
   await init();
@@ -20,8 +21,10 @@ async function main() {
   // e.g. 8 hyperthreads (cores) on a modern CPU
   await initThreadPool(navigator.hardwareConcurrency);
 
-  document.querySelector('button')?.addEventListener('click', async() => {
+  playButton?.addEventListener('click', async() => {
       
+    playButton.innerHTML = '⏹ Stop';
+
     // Initialize AudioContext and add AudioWorkletProcessor
     const audioContext = new AudioContext();
     const statsEl = document.getElementById('stats');
@@ -68,8 +71,8 @@ async function main() {
         console.log('AudioEngine started');
       } else {
         audioEngine.stop();
-        audioEngine.free();
         audioEngine = null;
+        playButton.innerHTML = '▶ Play';
         console.log('AudioEngine stopped');
       }
 
