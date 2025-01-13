@@ -27,6 +27,7 @@ pub struct AudioEngine {
     current_frame: Arc<AtomicU64>,
     current_time: Arc<AtomicU64>,
     is_running: Arc<AtomicBool>,
+    stats_callback: Option<js_sys::Function>,
 }
 
 #[wasm_bindgen]
@@ -62,8 +63,14 @@ impl AudioEngine {
             current_frame: Arc::new(AtomicU64::new(0)),
             current_time: Arc::new(AtomicU64::new(0.0f64.to_bits())),
             is_running: Arc::new(AtomicBool::new(false)),
+            stats_callback: None,
         }
     }
+
+    /// Register a JavaScript callback function to receive statistics
+    pub fn set_stats_callback(&mut self, callback: js_sys::Function) {
+      self.stats_callback = Some(callback);
+  }
 
     pub fn set_note(&self, note: u8) {
         let freq = note_fo_freq(note);
@@ -141,23 +148,17 @@ impl AudioEngine {
     
             // Calculate and log statistics every 100 renders
             if render_count == 100 {
-                // Avoid dynamic computations inside the logging
-                let total_theoretical_time_ms =
-                    (total_delay_frames as f32 / self.sample_rate) * 1000.0;
     
-                let avg_delay_ms = total_theoretical_time_ms / 100.0;
-                let avg_computation_time_ms = total_computation_time_ms / 100.0;
-                let render_time_congestion_ms =
-                    avg_computation_time_ms - avg_delay_ms as f64;
+                if let Some(callback) = &self.stats_callback {
+                    let stats = js_sys::Object::new();
+                    js_sys::Reflect::set(
+                        &stats,
+                        &"timeConsumedMs".into(),
+                        &JsValue::from_f64(total_computation_time_ms / 100.0 as f64),
+                    )?;
     
-                // Use pre-allocated logging buffer to avoid new String allocations
-                console::log_1(
-                    &format!(
-                        "Average delay: {:.3} ms, Average computation time: {:.3} ms, Render time congestion: {:.3} ms",
-                        avg_delay_ms, avg_computation_time_ms, render_time_congestion_ms
-                    )
-                    .into(),
-                );
+                    callback.call1(&JsValue::NULL, &stats)?;
+                }
     
                 // Reset statistics
                 total_delay_frames = 0;

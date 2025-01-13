@@ -20,22 +20,43 @@ async function main() {
       
     // Initialize AudioContext and add AudioWorkletProcessor
     const audioContext = new AudioContext();
+    const statsEl = document.getElementById('stats');
+    const bufferSizeEl = document.getElementById('bufferSize') as HTMLSelectElement;
 
     try {
       // Load the AudioWorklet processor
       await audioContext.audioWorklet.addModule(processor);
       
       console.log('AudioWorklet module loaded');
-      const bufferSize = 512;
+      const bufferSize = bufferSizeEl ? Number.parseInt(bufferSizeEl.value, 10) : 512;
       const channels = 2; // Stereo
       const sharedAudioBuffer = getStorageForCapacity(
         bufferSize * channels /** channels */ * 2 /** leave room for one ringbuffer rewind*/, Float32Array
       );
+      const timeAvailableMs = (bufferSize / audioContext.sampleRate) * 1000;
 
       if (audioEngine === null) {
         audioEngine = new AudioEngine(sharedAudioBuffer, channels, bufferSize, audioContext.sampleRate);
         audioEngine.set_note(36); // C1
         audioEngine.set_amplitude(0.15); // 15%
+        audioEngine.set_stats_callback((stats: Record<string, unknown>) => {
+          if (statsEl) {
+            statsEl.innerText = JSON.stringify(
+              { 
+                sharedArrayBuffer: self.crossOriginIsolated,
+                bufferSize,
+                audioWorklet: !!signalForwarderNode,
+                cpuCoresUsed: navigator.hardwareConcurrency,
+                channels, 
+                sampleRate: audioContext.sampleRate, 
+                timeAvailableMs, 
+                ...stats,  
+              },
+              null,
+              2
+            );
+          }
+        });
         audioEngine.start();
         console.log('AudioEngine started');
       } else {
