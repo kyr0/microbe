@@ -1,5 +1,5 @@
 import init, { initThreadPool, AudioEngine, Waveform } from '../pkg/microbe';
-import processor from "./processor?worker&url"
+import signalForwarderProcessor from "./signal-forwarder?worker&url"
 import { getStorageForCapacity } from "./ringbuf/index.js"
 
 console.log('SharedArrayBuffer support enabled?', self.crossOriginIsolated);
@@ -32,7 +32,7 @@ async function main() {
 
     try {
       // load the AudioWorklet processor
-      await audioContext.audioWorklet.addModule(processor);
+      await audioContext.audioWorklet.addModule(signalForwarderProcessor);
       
       console.log('AudioWorklet module loaded');
       const bufferSize = bufferSizeEl ? Number.parseInt(bufferSizeEl.value, 10) : 512;
