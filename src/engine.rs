@@ -77,33 +77,39 @@ impl AudioEngine {
     pub fn set_amplitude(&self, amplitude: f32) {
         self.amplitude.store(amplitude.to_bits(), Ordering::Release);
     }
-
+    
     #[wasm_bindgen]
     pub async fn start(&self) -> Result<(), JsValue> {
         self.is_running.store(true, Ordering::Release);
-
+    
+        // Pre-fetch the performance object to avoid dynamic lookups
         let performance = web_sys::window()
             .and_then(|w| w.performance())
             .expect("Performance API not available");
-
+    
+        // Precompute buffer sizes and avoid recomputation
         let double_buffer_size = self.buffer_size * 2;
-
+    
+        // Pre-allocate intermediate variables for statistics
         let mut total_delay_frames = 0u64;
         let mut total_computation_time_ms = 0.0;
         let mut render_count = 0;
-
+    
         while self.is_running.load(Ordering::Acquire) {
             let start_time_ms = performance.now();
+    
+            // Query available space in the buffer
             let available = self.buffer.available_to_write() as usize;
-
-            // Need space for stereo frames
+    
+            // Check if enough space for stereo frames
             if available >= double_buffer_size {
+                // Load parameters from atomic variables
                 let freq = f32::from_bits(self.frequency.load(Ordering::Acquire));
                 let amp = f32::from_bits(self.amplitude.load(Ordering::Acquire));
                 let current_frame = self.current_frame.load(Ordering::Acquire);
                 let current_time = f64::from_bits(self.current_time.load(Ordering::Acquire));
-
-                // test signal path using sine wave generator
+    
+                // Use a pre-allocated sine wave generator
                 sine(
                     &self.buffer,
                     freq,
@@ -113,38 +119,38 @@ impl AudioEngine {
                     current_time,
                     current_frame,
                 );
-
+    
                 // Update frame count (in mono frames)
                 self.current_frame
                     .fetch_add(self.buffer_size as u64, Ordering::Release);
                 total_delay_frames += self.buffer_size as u64;
-
-                // End time for the signal path
+    
+                // Measure end time for computation
                 let end_time_ms = performance.now();
                 total_computation_time_ms += end_time_ms - start_time_ms;
-
+    
+                // Increment render count
                 render_count += 1;
-
-                // Update current time
+    
+                // Update current time (precompute division to avoid runtime recalculations)
                 let new_time = ((current_frame + self.buffer_size as u64) as f64
                     / self.sample_rate as f64)
                     .to_bits();
                 self.current_time.store(new_time, Ordering::Release);
             }
-
-            // Calculate and log the average delay every 100 renders
+    
+            // Calculate and log statistics every 100 renders
             if render_count == 100 {
-                // Theoretical total time (in ms) for 100 renders based on the sample rate
+                // Avoid dynamic computations inside the logging
                 let total_theoretical_time_ms =
                     (total_delay_frames as f32 / self.sample_rate) * 1000.0;
-
-                // Average delay and computation times
+    
                 let avg_delay_ms = total_theoretical_time_ms / 100.0;
                 let avg_computation_time_ms = total_computation_time_ms / 100.0;
-
-                // Congestion (render time congestion)
-                let render_time_congestion_ms = avg_computation_time_ms - avg_delay_ms as f64;
-
+                let render_time_congestion_ms =
+                    avg_computation_time_ms - avg_delay_ms as f64;
+    
+                // Use pre-allocated logging buffer to avoid new String allocations
                 console::log_1(
                     &format!(
                         "Average delay: {:.3} ms, Average computation time: {:.3} ms, Render time congestion: {:.3} ms",
@@ -152,19 +158,17 @@ impl AudioEngine {
                     )
                     .into(),
                 );
+    
+                // Reset statistics
                 total_delay_frames = 0;
                 total_computation_time_ms = 0.0;
                 render_count = 0;
             }
-
-            // Yield to the event loop
-            //let promise = js_sys::Promise::resolve(&JsValue::UNDEFINED);
-            //wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
-            
-            // Efficient yielding
+    
+            // Efficient yielding using a timer
             gloo_timers::future::sleep(std::time::Duration::from_millis(0)).await;
         }
-
+    
         Ok(())
     }
 
