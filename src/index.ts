@@ -1,4 +1,4 @@
-import init, { initThreadPool, AudioEngine } from '../pkg/microbe';
+import init, { initThreadPool, AudioEngine, Waveform } from '../pkg/microbe';
 import processor from "./processor?worker&url"
 import { getStorageForCapacity } from "./ringbuf/index.js"
 
@@ -6,6 +6,10 @@ console.log('SharedArrayBuffer support enabled?', self.crossOriginIsolated);
 
 async function main() {
   let audioEngine: AudioEngine|null = null;
+
+  const bufferSizeEl = document.getElementById('bufferSize') as HTMLSelectElement;
+  const parallelismEl = document.getElementById('parallelism') as HTMLInputElement;
+  const waveformEl = document.getElementById('waveform') as HTMLSelectElement;
 
   // init wasm-bindgen
   await init();
@@ -21,8 +25,6 @@ async function main() {
     // Initialize AudioContext and add AudioWorkletProcessor
     const audioContext = new AudioContext();
     const statsEl = document.getElementById('stats');
-    const bufferSizeEl = document.getElementById('bufferSize') as HTMLSelectElement;
-    const parallelismEl = document.getElementById('parallelism') as HTMLInputElement;
 
     try {
       // load the AudioWorklet processor
@@ -36,12 +38,13 @@ async function main() {
       );
       const timeAvailableMs = (bufferSize / audioContext.sampleRate) * 1000;
       const parallelism = parallelismEl ? Number.parseInt(parallelismEl.value, 10) : 1;
+      const waveform = waveformEl ? Number.parseInt(waveformEl.value, 10) as Waveform : Waveform.Sawtooth;
 
       if (audioEngine === null) {
-        audioEngine = new AudioEngine(sharedAudioBuffer, bufferSize, audioContext.sampleRate, parallelism);
+        audioEngine = new AudioEngine(sharedAudioBuffer, bufferSize, audioContext.sampleRate, parallelism, waveform);
         audioEngine.set_note(36); // C1
         audioEngine.set_amplitude(0.15); // 15%
-        audioEngine.set_stats_callback((stats: Record<string, unknown>) => {
+        audioEngine.set_stats_callback((stats: { signalChainTookMs: number }) => {
           if (statsEl) {
             statsEl.innerText = JSON.stringify(
               { 
@@ -50,9 +53,10 @@ async function main() {
                 audioWorklet: !!signalForwarderNode,
                 cpuCoresUsed: navigator.hardwareConcurrency,
                 channels, 
-                sampleRate: audioContext.sampleRate, 
-                timeAvailableMs, 
                 osciallators: parallelism,
+                sampleRate: audioContext.sampleRate, 
+                cpuUsagePercent: 100 * (stats.signalChainTookMs / timeAvailableMs),
+                timeAvailableMs, 
                 ...stats,  
               },
               null,
@@ -104,6 +108,14 @@ async function main() {
       console.log(`Amplitude set to ${value}`);
     }
   });
+
+  waveformEl.addEventListener('change', (event) => {
+    const value = Number.parseInt((event.target as HTMLSelectElement).value, 10) as Waveform;
+    if (audioEngine) {
+      audioEngine.set_waveform(value);
+      console.log(`Waveform set to ${value}`);
+    }
+  })
 }
 
 main().catch(console.error);
