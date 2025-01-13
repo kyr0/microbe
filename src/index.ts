@@ -22,9 +22,10 @@ async function main() {
     const audioContext = new AudioContext();
     const statsEl = document.getElementById('stats');
     const bufferSizeEl = document.getElementById('bufferSize') as HTMLSelectElement;
+    const parallelismEl = document.getElementById('parallelism') as HTMLInputElement;
 
     try {
-      // Load the AudioWorklet processor
+      // load the AudioWorklet processor
       await audioContext.audioWorklet.addModule(processor);
       
       console.log('AudioWorklet module loaded');
@@ -34,9 +35,10 @@ async function main() {
         bufferSize * channels /** channels */ * 2 /** leave room for one ringbuffer rewind*/, Float32Array
       );
       const timeAvailableMs = (bufferSize / audioContext.sampleRate) * 1000;
+      const parallelism = parallelismEl ? Number.parseInt(parallelismEl.value, 10) : 1;
 
       if (audioEngine === null) {
-        audioEngine = new AudioEngine(sharedAudioBuffer, channels, bufferSize, audioContext.sampleRate);
+        audioEngine = new AudioEngine(sharedAudioBuffer, bufferSize, audioContext.sampleRate, parallelism);
         audioEngine.set_note(36); // C1
         audioEngine.set_amplitude(0.15); // 15%
         audioEngine.set_stats_callback((stats: Record<string, unknown>) => {
@@ -50,6 +52,7 @@ async function main() {
                 channels, 
                 sampleRate: audioContext.sampleRate, 
                 timeAvailableMs, 
+                osciallators: parallelism,
                 ...stats,  
               },
               null,
