@@ -38,7 +38,7 @@ async function main() {
       const bufferSize = bufferSizeEl ? Number.parseInt(bufferSizeEl.value, 10) : 512;
       const channels = 2; // Stereo
       const sharedAudioBuffer = getStorageForCapacity(
-        bufferSize * channels /** channels */ * 12 /** leave room for one ringbuffer rewind*/, Float32Array
+        bufferSize * channels /** channels */ * 12 /** safety margin for scheduling delay */, Float32Array
       );
       const timeAvailableMs = (bufferSize / audioContext.sampleRate) * 1000;
       const parallelism = parallelismEl ? Number.parseInt(parallelismEl.value, 10) : 1;

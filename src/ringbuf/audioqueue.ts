@@ -49,18 +49,12 @@ export function interleave(input: Float32Array[], output: Float32Array): void {
     throw new RangeError("input and output of incompatible sizes");
   }
 
-  let out_idx = 0;
-
   // unroll the outer loop by processing 4 frames at a time
-  for (let i = 0; i < 128; i += 4) {
+  let out_idx = 0;
+  for (let i = 0; i < 128; i++) {
     for (let channel = 0; channel < input.length; channel++) {
-      const in_channel = input[channel];
-      // process 4 frames at a time to reduce loop overhead
-      output[out_idx] = in_channel[i];
-      output[out_idx + 1] = in_channel[i + 1];
-      output[out_idx + 2] = in_channel[i + 2];
-      output[out_idx + 3] = in_channel[i + 3];
-      out_idx += 4;
+      output[out_idx] = input[channel][i];
+      out_idx++;
     }
   }
 }

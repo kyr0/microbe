@@ -349,15 +349,28 @@ export class RingBuffer {
 
     // Slow path: copy element by element, but at least JIT-optimized.
     let i = 0;
-    const unrollFactor = 4;
+    const unrollFactor = 16;
 
     for (; i <= size - unrollFactor; i += unrollFactor) {
       output[offset_output + i] = input[offset_input + i];
       output[offset_output + i + 1] = input[offset_input + i + 1];
       output[offset_output + i + 2] = input[offset_input + i + 2];
       output[offset_output + i + 3] = input[offset_input + i + 3];
+      output[offset_output + i + 4] = input[offset_input + i + 4];
+      output[offset_output + i + 5] = input[offset_input + i + 5];
+      output[offset_output + i + 6] = input[offset_input + i + 6];
+      output[offset_output + i + 7] = input[offset_input + i + 7];
+      output[offset_output + i + 8] = input[offset_input + i + 8];
+      output[offset_output + i + 9] = input[offset_input + i + 9];
+      output[offset_output + i + 10] = input[offset_input + i + 10];
+      output[offset_output + i + 11] = input[offset_input + i + 11];
+      output[offset_output + i + 12] = input[offset_input + i + 12];
+      output[offset_output + i + 13] = input[offset_input + i + 13];
+      output[offset_output + i + 14] = input[offset_input + i + 14];
+      output[offset_output + i + 15] = input[offset_input + i + 15];
     }
 
+    // remaining elements for when the size is not a multiple of unrollFactor
     for (; i < size; i++) {
       output[offset_output + i] = input[offset_input + i];
     }
