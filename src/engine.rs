@@ -268,23 +268,10 @@ impl AudioEngine {
 
         render_count += 1;
       } else {
-        if available < double_buffer_size {
+          // instead of sleeping for a fixed duration, dynamically adjust sleep time
           let chunk_time_ms = (self.buffer_size as f64 / self.sample_rate as f64) * 1000.0;
           gloo_timers::future::sleep(std::time::Duration::from_millis(chunk_time_ms as u64 / 4)).await;
-      } else {
-          // no space, sleep
-          // instead of sleeping for a fixed duration, dynamically adjust sleep time
-          let sleep_duration = std::time::Duration::from_millis(0);
-          gloo_timers::future::sleep(sleep_duration).await;
-        }
       }
-
-      // check if enough space for stereo frames
-      //if available >= double_buffer_size {
-        
-      //} else {
-      
-      //}
 
       // calculate and log statistics every 100 renders
       if render_count == 100 {

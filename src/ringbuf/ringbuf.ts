@@ -351,6 +351,8 @@ export class RingBuffer {
     let i = 0;
     const unrollFactor = 16;
 
+    // unroll the loop for better performance; best unroll factor in 2025 for this is 16
+    // across all engines: https://github.com/padenot/ringbuf.js/issues/22#issuecomment-2590990421
     for (; i <= size - unrollFactor; i += unrollFactor) {
       output[offset_output + i] = input[offset_input + i];
       output[offset_output + i + 1] = input[offset_input + i + 1];

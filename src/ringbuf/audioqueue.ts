@@ -24,6 +24,7 @@ export function deinterleave(input: Float32Array, output: Float32Array[]): void 
     let interleaved_idx = i;
 
     // Unroll the inner loop by processing 4 samples at a time
+    // Best unroll factor in 2025 for this is 4: https://github.com/padenot/ringbuf.js/issues/22#issuecomment-2591073674
     for (let j = 0; j < 128; j += 4) {
       out_channel[j] = input[interleaved_idx];
       out_channel[j + 1] = input[interleaved_idx + channel_count];
@@ -49,7 +50,8 @@ export function interleave(input: Float32Array[], output: Float32Array): void {
     throw new RangeError("input and output of incompatible sizes");
   }
 
-  // unroll the outer loop by processing 4 frames at a time
+  // this algo, as of 2025 does not benefit from loop unrolling
+  // https://github.com/padenot/ringbuf.js/issues/22#issuecomment-2591103602
   let out_idx = 0;
   for (let i = 0; i < 128; i++) {
     for (let channel = 0; channel < input.length; channel++) {
