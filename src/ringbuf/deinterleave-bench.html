@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>deinterleave Benchmark Comparison</title>
+  <script src="https://cdn.plot.ly/plotly-2.18.1.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      padding: 20px;
+    }
+
+    #deinterleaveChart {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="deinterleaveChart"></div>
+
+  <script>
+    // Deterministic setup function
+    function setupDeterministicDeinterleave() {
+      const input = [
+        Array(128).fill(0).map((_, i) => i / 128),
+        Array(128).fill(0).map((_, i) => 1 - i / 128)
+      ];
+      const output = new Float32Array(input.length * 128);
+      return { input, output };
+    }
+
+    // Baseline implementation
+    function deinterleaveBaseline(DATA) {
+      const input = DATA.input;
+      const output = DATA.output;
+      let out_idx = 0;
+
+      for (let i = 0; i < 128; i++) {
+        for (let channel = 0; channel < input.length; channel++) {
+          output[out_idx] = input[channel][i];
+          out_idx++;
+        }
+      }
+    }
+
+    // Unroll 4 implementation
+    function deinterleaveUnroll4(DATA) {
+      const unrollFactor = 4;
+      const input = DATA.input;
+      const output = DATA.output;
+      let out_idx = 0;
+      let inputLength = input.length;
+
+      for (let i = 0; i < 128; i += unrollFactor) {
+        for (let channel = 0; channel < inputLength; channel++) {
+          output[out_idx] = input[channel][i];
+          output[out_idx + 1] = input[channel][i + 1];
+          output[out_idx + 2] = input[channel][i + 2];
+          output[out_idx + 3] = input[channel][i + 3];
+          out_idx += unrollFactor;
+        }
+      }
+    }
+
+    // Unroll 8 implementation
+    function deinterleaveUnroll8(DATA) {
+      const unrollFactor = 8;
+      const input = DATA.input;
+      const output = DATA.output;
+      let out_idx = 0;
+      let inputLength = input.length;
+
+      for (let i = 0; i < 128; i += unrollFactor) {
+        for (let channel = 0; channel < inputLength; channel++) {
+          for (let u = 0; u < unrollFactor; u++) {
+            output[out_idx + u] = input[channel][i + u];
+          }
+          out_idx += unrollFactor;
+        }
+      }
+    }
+
+    // Unroll 16 implementation
+    function deinterleaveUnroll16(DATA) {
+      const unrollFactor = 16;
+      const input = DATA.input;
+      const output = DATA.output;
+      let out_idx = 0;
+      let inputLength = input.length;
+
+      for (let i = 0; i < 128; i += unrollFactor) {
+        for (let channel = 0; channel < inputLength; channel++) {
+          for (let u = 0; u < unrollFactor; u++) {
+            output[out_idx + u] = input[channel][i + u];
+          }
+          out_idx += unrollFactor;
+        }
+      }
+    }
+
+    // Benchmark runner with deterministic input
+    function runDeinterleaveBenchmark(technique, iterations, batchSize = 10000) {
+      const timings = [];
+      const data = setupDeterministicDeinterleave();
+
+      for (let i = 0; i < iterations; i++) {
+        const start = performance.now();
+
+        for (let j = 0; j < batchSize; j++) {
+          technique(data);
+        }
+
+        const end = performance.now();
+        timings.push(((end - start) * 1000) / batchSize);
+      }
+      return timings;
+    }
+
+    const deinterleaveBaselineTimings = runDeinterleaveBenchmark(deinterleaveBaseline, 500);
+    const deinterleaveUnroll4Timings = runDeinterleaveBenchmark(deinterleaveUnroll4, 500);
+    const deinterleaveUnroll8Timings = runDeinterleaveBenchmark(deinterleaveUnroll8, 500);
+    const deinterleaveUnroll16Timings = runDeinterleaveBenchmark(deinterleaveUnroll16, 500);
+
+    const deinterleaveData = [
+      {
+        x: deinterleaveBaselineTimings,
+        type: 'histogram',
+        name: 'Baseline',
+        opacity: 0.7
+      },
+      {
+        x: deinterleaveUnroll4Timings,
+        type: 'histogram',
+        name: 'Unroll 4',
+        opacity: 0.7
+      },
+      {
+        x: deinterleaveUnroll8Timings,
+        type: 'histogram',
+        name: 'Unroll 8',
+        opacity: 0.7
+      },
+      {
+        x: deinterleaveUnroll16Timings,
+        type: 'histogram',
+        name: 'Unroll 16',
+        opacity: 0.7
+      }
+    ];
+
+    const deinterleaveLayout = {
+      title: 'Deinterleave Performance Comparison',
+      xaxis: {
+        title: 'Time (µs)',
+        showgrid: true
+      },
+      yaxis: {
+        title: 'Frequency',
+        showgrid: true
+      },
+      barmode: 'overlay',
+      legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: 1.1 }
+    };
+
+    Plotly.newPlot('deinterleaveChart', deinterleaveData, deinterleaveLayout);
+
+  </script>
+</body>
+
+</html>

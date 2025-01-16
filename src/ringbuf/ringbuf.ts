@@ -1,6 +1,5 @@
 import type { TypedArray, TypedArrayConstructor } from "./types";
 
-
 /** The base RingBuffer class
  *
  * A Single Producer - Single Consumer thread-safe wait-free ring buffer.
