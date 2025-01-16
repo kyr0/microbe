@@ -25,11 +25,11 @@
   <script>
     // Deterministic setup function
     function setupDeterministicDeinterleave() {
-      const input = [
-        Array(128).fill(0).map((_, i) => i / 128),
-        Array(128).fill(0).map((_, i) => 1 - i / 128)
-      ];
-      const output = new Float32Array(input.length * 128);
+      const numChannels = Math.floor(Math.random() * 5) + 2;
+      const input = Array.from({ length: numChannels }, () =>
+        Array(128).fill(0).map(() => Math.random())
+      );
+      const output = new Float32Array(numChannels * 128);
       return { input, output };
     }
 
@@ -102,16 +102,19 @@
       }
     }
 
-    // Benchmark runner with deterministic input
-    function runDeinterleaveBenchmark(technique, iterations, batchSize = 10000) {
+    const batchSize = 10000;
+
+    // pre-generating random data to not affect the benchmark
+    const data = Array.from({ length: batchSize }, () => setupDeterministicDeinterleave());
+
+    function runDeinterleaveBenchmark(data, technique, iterations, batchSize = 10000) {
       const timings = [];
-      const data = setupDeterministicDeinterleave();
 
       for (let i = 0; i < iterations; i++) {
         const start = performance.now();
 
         for (let j = 0; j < batchSize; j++) {
-          technique(data);
+          technique(data[j]);
         }
 
         const end = performance.now();
@@ -120,10 +123,10 @@
       return timings;
     }
 
-    const deinterleaveBaselineTimings = runDeinterleaveBenchmark(deinterleaveBaseline, 500);
-    const deinterleaveUnroll4Timings = runDeinterleaveBenchmark(deinterleaveUnroll4, 500);
-    const deinterleaveUnroll8Timings = runDeinterleaveBenchmark(deinterleaveUnroll8, 500);
-    const deinterleaveUnroll16Timings = runDeinterleaveBenchmark(deinterleaveUnroll16, 500);
+    const deinterleaveBaselineTimings = runDeinterleaveBenchmark(data, deinterleaveBaseline, 250, batchSize);
+    const deinterleaveUnroll4Timings = runDeinterleaveBenchmark(data, deinterleaveUnroll4, 250, batchSize);
+    const deinterleaveUnroll8Timings = runDeinterleaveBenchmark(data, deinterleaveUnroll8, 250, batchSize);
+    const deinterleaveUnroll16Timings = runDeinterleaveBenchmark(data, deinterleaveUnroll16, 250, batchSize);
 
     const deinterleaveData = [
       {
