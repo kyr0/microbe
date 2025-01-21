@@ -10,7 +10,7 @@
     "fmt": "cargo fmt --all -- --check"
   },
   "devDependencies": {
-    "vite": "^6.0.7",
+    "vite": "^6.0.9",
     "@types/web": "^0.0.192",
     "@types/audioworklet": "^0.0.65"
   },
